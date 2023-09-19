@@ -58,7 +58,36 @@ trainIndex <- createDataPartition(data$Exited, p = 0.7, list = FALSE)
 trainData <- data[trainIndex, ]
 testData <- data[-trainIndex, ]
 
-model <- randomForest(Exited~.-CustomerId, data = trainData, ntree = 100)
+# Define a grade de hiperparâmetros
+hyperparameters <- expand.grid(
+  mtry = c(2, 3, 4),   # Número de variáveis a serem consideradas em cada divisão
+  ntree = c(100, 200, 300)  # Número de árvores na floresta
+)
+
+# Cria uma função para avaliar o modelo com os hiperparâmetros específicos
+fit_model <- function(mtry, ntree) {
+  model <- randomForest(
+    Exited ~ . - CustomerId,
+    data = trainData,
+    mtry = mtry,
+    ntree = ntree
+  )
+  predictions <- predict(model, newdata = testData)
+  accuracy <- mean(predictions == testData$Exited)
+  return(accuracy)
+}
+
+# Aplica o Grid Search
+results <- apply(hyperparameters, 1, function(row) {
+  fit_model(row[["mtry"]], row[["ntree"]])
+})
+
+# Identifica os melhores hiperparâmetros
+best_params <- hyperparameters[which.max(results), ]
+
+print(best_params)
+
+model <- randomForest(Exited~.-CustomerId, data = trainData, ntree = best_params$ntree, mtry = best_params$mtry)
 
 # Valida a importância das variáveis
 varImportance <- importance(model)
@@ -167,13 +196,11 @@ predictions <- predict(rf_model, newdata = testData[, predictors])
 accuracy <- mean(predictions == testData$Exited)
 print(accuracy)
 
-# Matriz de confusão
-confusionMatrix(predictions, testData$Exited)
-
 # Curva ROC e AUC
 roc_curve <- roc(testData$Exited, as.numeric(predictions == "Yes"))
 auc <- auc(roc_curve)
 print(auc)
+plot(roc_curve)
 
 # Define o esquema de validação cruzada manualmente
 folds <- createFolds(trainData$Exited, k = 5)
@@ -209,6 +236,9 @@ predictions <- predict(rf_model, newdata = testData)
 
 # Exibe as previsões
 predictions
+
+# Matriz de confusão
+confusionMatrix(predictions, testData$Exited)
 
 # Adiciona as previsões ao conjunto de teste
 testData$PredictedExited <- predictions
